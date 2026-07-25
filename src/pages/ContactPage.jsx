@@ -1,11 +1,10 @@
 import React from 'react';
 import PageEditorShell, { AddItemButton, ItemActionsMenu } from '../components/PageEditorShell';
 import { EditableText, EditableImage } from '../components/Editable';
-import { getContactContent, saveContactContent } from '../data/contactContentManager';
 
 export default function ContactPage() {
   return (
-    <PageEditorShell pageId="contact" title="Contact Us Page" getContent={getContactContent} saveContent={saveContactContent}>
+    <PageEditorShell pageId="contact" title="Contact Us Page">
       {({ content, editorMode, update, addItem, removeItem }) => (
         <main className="w-full">
           {/* Hero Section */}

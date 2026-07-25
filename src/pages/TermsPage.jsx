@@ -1,11 +1,10 @@
 import React from 'react';
 import PageEditorShell, { AddItemButton, ItemActionsMenu } from '../components/PageEditorShell';
 import { EditableText } from '../components/Editable';
-import { getTermsContent, saveTermsContent } from '../data/termsContentManager';
 
 export default function TermsPage() {
   return (
-    <PageEditorShell pageId="terms" title="Terms of Service Page" getContent={getTermsContent} saveContent={saveTermsContent}>
+    <PageEditorShell pageId="terms" title="Terms of Service Page">
       {({ content, editorMode, update, addItem, removeItem }) => (
         <main className="w-full">
           <section className="w-full bg-[#E8F5F0] py-section-gap">

@@ -4,7 +4,7 @@ const LS_KEY = 'bhri_site_content';
 
 // Fill any fields missing from stored content with the code defaults, so pages
 // keep working when new sections are added after content was saved.
-const mergeWithDefaults = (defaults, stored) => {
+export const mergeWithDefaults = (defaults, stored) => {
   if (stored === undefined || stored === null) return defaults;
   if (Array.isArray(stored)) return stored;
   if (typeof stored === 'object' && defaults && typeof defaults === 'object' && !Array.isArray(defaults)) {
@@ -26,13 +26,46 @@ const readLocal = () => {
   }
 };
 
-const writeLocal = (pageId, content) => {
+const writeLocalAll = (all) => {
   try {
-    const all = readLocal();
-    all[pageId] = content;
     localStorage.setItem(LS_KEY, JSON.stringify(all));
   } catch (e) {
     console.error("Failed to cache site content in localStorage:", e);
+  }
+};
+
+const writeLocal = (pageId, content) => {
+  const all = readLocal();
+  all[pageId] = content;
+  writeLocalAll(all);
+};
+
+// Fetches every page's content in one request. The site_content table holds a
+// handful of JSON rows, so pulling it whole is cheaper than one request per
+// page editor and lets all of them share a single cache entry.
+export const fetchAllPageContent = async () => {
+  try {
+    const { data, error } = await supabase
+      .from('site_content')
+      .select('id, content');
+
+    if (error) {
+      console.error("Failed to fetch site content from Supabase, falling back to local data:", error);
+      return readLocal();
+    }
+
+    const remote = {};
+    for (const row of data || []) {
+      if (row && row.content) remote[row.id] = row.content;
+    }
+
+    // Pages that exist only in the local cache (never saved remotely yet) are kept.
+    const all = { ...readLocal(), ...remote };
+    writeLocalAll(all);
+    return all;
+  } catch (e) {
+    console.error("Exception fetching site content:", e);
+    return readLocal();
   }
 };
 

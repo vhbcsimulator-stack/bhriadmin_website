@@ -3,13 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import PageEditorShell, { AddItemButton, ItemActionsMenu } from '../components/PageEditorShell';
 import { EditableText, EditableImage } from '../components/Editable';
 import IconSourceHint from '../components/IconSourceHint';
-import { getCareerContent, saveCareerContent } from '../data/careerContentManager';
 
 export default function CareerPage() {
   const navigate = useNavigate();
 
   return (
-    <PageEditorShell pageId="career" title="Careers Page" getContent={getCareerContent} saveContent={saveCareerContent}>
+    <PageEditorShell pageId="career" title="Careers Page">
       {({ content, editorMode, update, addItem, removeItem, handleSave }) => {
         const handleManageDetails = async (roleId) => {
           const saved = await handleSave();

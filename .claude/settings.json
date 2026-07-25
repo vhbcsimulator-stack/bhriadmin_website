@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install *)",
+      "Bash(npm run *)",
+      "Bash(git status *)",
+      "Bash(node -p \"require\\('./node_modules/@tanstack/react-query/package.json'\\).version\")"
+    ]
+  }
+}

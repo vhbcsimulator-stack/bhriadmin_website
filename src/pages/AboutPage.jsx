@@ -3,7 +3,6 @@ import PageEditorShell, { AddItemButton, ItemActionsMenu } from '../components/P
 import { EditableText, EditableImage } from '../components/Editable';
 import IconSourceHint from '../components/IconSourceHint';
 import { resolveImage } from '../data/staticImages';
-import { getAboutContent, saveAboutContent } from '../data/aboutContentManager';
 
 // Reusable side-by-side editable section: title + paragraphs + image
 function TextImageSection({ basePath, section, editorMode, update, addItem, removeItem, reverse = false, className = '' }) {
@@ -274,7 +273,7 @@ function DepartmentsSection({ content, editorMode, update, addItem, removeItem }
 
 export default function AboutPage() {
   return (
-    <PageEditorShell pageId="about" title="About Us Page" getContent={getAboutContent} saveContent={saveAboutContent}>
+    <PageEditorShell pageId="about" title="About Us Page">
       {({ content, editorMode, update, addItem, removeItem }) => (
         <main className="flex-grow">
           {/* About Us intro */}

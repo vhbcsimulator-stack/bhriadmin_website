@@ -1,32 +1,34 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import Navbar from './Navbar';
 import Footer from './Footer';
 import { setDeep } from './Editable';
+import { usePageContent, useSavePageContent } from '../hooks/usePageContent';
 
 const getDeep = (obj, path) => path.split('.').reduce((cur, key) => cur[key], obj);
 
 // Shared shell for the website page editors (Home / About / Contact).
-// Loads the page content via the page's own manager (getContent/saveContent),
-// provides update/addItem/removeItem helpers and a sticky toolbar with
+// Content comes from the shared site-content query; local edits are held in a
+// draft that overrides the cached copy until it is saved or discarded.
+// Provides update/addItem/removeItem helpers and a sticky toolbar with
 // Edit/Preview toggle and Save.
-export default function PageEditorShell({ pageId, title, getContent, saveContent, children }) {
-  const [content, setContent] = useState(null);
-  const [editorMode, setEditorMode] = useState('edit');
-  const [saveState, setSaveState] = useState('idle'); // 'idle' | 'saving' | 'saved'
+export default function PageEditorShell({ pageId, title, children }) {
+  const { data: savedContent } = usePageContent(pageId);
+  const saveMutation = useSavePageContent(pageId);
 
-  useEffect(() => {
-    getContent()
-      .then(setContent)
-      .catch((e) => console.error(`Failed to load "${pageId}" content:`, e));
-  }, [pageId]);
+  const [draft, setDraft] = useState(null);
+  const [editorMode, setEditorMode] = useState('edit');
+  const [justSaved, setJustSaved] = useState(false);
+
+  const content = draft ?? savedContent ?? null;
+  const saveState = saveMutation.isPending ? 'saving' : justSaved ? 'saved' : 'idle';
 
   const update = (path, value) => {
-    setContent((prev) => setDeep(prev, path, value));
+    setDraft((prev) => setDeep(prev ?? savedContent, path, value));
   };
 
   const addItem = (path, template, { prepend = false } = {}) => {
-    setContent((prev) => {
-      const next = structuredClone(prev);
+    setDraft((prev) => {
+      const next = structuredClone(prev ?? savedContent);
       const arr = getDeep(next, path);
       if (prepend) {
         arr.unshift(structuredClone(template));
@@ -38,8 +40,8 @@ export default function PageEditorShell({ pageId, title, getContent, saveContent
   };
 
   const removeItem = (path, index) => {
-    setContent((prev) => {
-      const next = structuredClone(prev);
+    setDraft((prev) => {
+      const next = structuredClone(prev ?? savedContent);
       const arr = getDeep(next, path);
       arr.splice(index, 1);
       return next;
@@ -47,14 +49,15 @@ export default function PageEditorShell({ pageId, title, getContent, saveContent
   };
 
   const handleSave = async () => {
-    setSaveState('saving');
     try {
-      await saveContent(content);
-      setSaveState('saved');
-      setTimeout(() => setSaveState('idle'), 2000);
+      await saveMutation.mutateAsync(content);
+      // The mutation pushed this content into the cache, so the draft can be
+      // dropped and the editor can read from the cache again.
+      setDraft(null);
+      setJustSaved(true);
+      setTimeout(() => setJustSaved(false), 2000);
       return true;
     } catch (err) {
-      setSaveState('idle');
       alert("Failed to save changes: " + err.message);
       return false;
     }

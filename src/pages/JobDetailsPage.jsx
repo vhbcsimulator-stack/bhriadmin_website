@@ -3,28 +3,29 @@ import { useParams, useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import { EditableText } from '../components/Editable';
-import { getCareerContent, saveCareerContent } from '../data/careerContentManager';
+import { usePageContent, useSavePageContent } from '../hooks/usePageContent';
 
 export default function JobDetailsPage() {
   const { jobId } = useParams();
   const navigate = useNavigate();
 
-  const [career, setCareer] = useState(null);
-  const [roleIndex, setRoleIndex] = useState(-1);
+  // Shares the cached careers content with the Careers page editor.
+  const { data: savedCareer } = usePageContent('career');
+  const saveMutation = useSavePageContent('career');
+
+  const [draft, setDraft] = useState(null);
   const [editorMode, setEditorMode] = useState('edit');
-  const [saveState, setSaveState] = useState('idle'); // 'idle' | 'saving' | 'saved'
+  const [justSaved, setJustSaved] = useState(false);
+
+  const career = draft ?? savedCareer ?? null;
+  const roleIndex = career ? career.roles.items.findIndex((r) => r.id === jobId) : -1;
+  const saveState = saveMutation.isPending ? 'saving' : justSaved ? 'saved' : 'idle';
 
   useEffect(() => {
-    getCareerContent().then((data) => {
-      const idx = data.roles.items.findIndex((r) => r.id === jobId);
-      if (idx === -1) {
-        navigate('/careers');
-        return;
-      }
-      setCareer(data);
-      setRoleIndex(idx);
-    }).catch((e) => console.error("Failed to load job details:", e));
-  }, [jobId, navigate]);
+    if (savedCareer && savedCareer.roles.items.findIndex((r) => r.id === jobId) === -1) {
+      navigate('/careers');
+    }
+  }, [savedCareer, jobId, navigate]);
 
   if (!career || roleIndex === -1) {
     return (
@@ -37,24 +38,24 @@ export default function JobDetailsPage() {
   const role = career.roles.items[roleIndex];
 
   const updateRole = (field, value) => {
-    setCareer((prev) => {
-      const next = structuredClone(prev);
+    setDraft((prev) => {
+      const next = structuredClone(prev ?? savedCareer);
       next.roles.items[roleIndex][field] = value;
       return next;
     });
   };
 
   const updateListItem = (field, index, value) => {
-    setCareer((prev) => {
-      const next = structuredClone(prev);
+    setDraft((prev) => {
+      const next = structuredClone(prev ?? savedCareer);
       next.roles.items[roleIndex][field][index] = value;
       return next;
     });
   };
 
   const addListItem = (field) => {
-    setCareer((prev) => {
-      const next = structuredClone(prev);
+    setDraft((prev) => {
+      const next = structuredClone(prev ?? savedCareer);
       if (!next.roles.items[roleIndex][field]) next.roles.items[roleIndex][field] = [];
       next.roles.items[roleIndex][field].push('New item');
       return next;
@@ -62,21 +63,20 @@ export default function JobDetailsPage() {
   };
 
   const removeListItem = (field, index) => {
-    setCareer((prev) => {
-      const next = structuredClone(prev);
+    setDraft((prev) => {
+      const next = structuredClone(prev ?? savedCareer);
       next.roles.items[roleIndex][field].splice(index, 1);
       return next;
     });
   };
 
   const handleSave = async () => {
-    setSaveState('saving');
     try {
-      await saveCareerContent(career);
-      setSaveState('saved');
-      setTimeout(() => setSaveState('idle'), 2000);
+      await saveMutation.mutateAsync(career);
+      setDraft(null);
+      setJustSaved(true);
+      setTimeout(() => setJustSaved(false), 2000);
     } catch (err) {
-      setSaveState('idle');
       alert("Failed to save changes: " + err.message);
     }
   };

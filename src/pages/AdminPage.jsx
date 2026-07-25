@@ -3,18 +3,16 @@ import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import { EditableText, EditableImage } from '../components/Editable';
-import {
-  getAllProperties,
-  saveProperty,
-  deleteProperty,
-  createDefaultPropertyTemplate
-} from '../data/propertiesManager';
+import { createDefaultPropertyTemplate } from '../data/propertiesManager';
+import { useProperties, useSaveProperty, useDeleteProperty } from '../hooks/useProperties';
 import { propertiesData } from '../data/propertiesData';
 
 
 export default function AdminPage() {
   const navigate = useNavigate();
-  const [properties, setProperties] = useState([]);
+  const { data: properties = [] } = useProperties();
+  const savePropertyMutation = useSaveProperty();
+  const deletePropertyMutation = useDeleteProperty();
   const [view, setView] = useState('dashboard'); // 'dashboard' | 'editor'
   const [editingProperty, setEditingProperty] = useState(null);
   const [editorMode, setEditorMode] = useState('edit'); // 'edit' | 'preview'
@@ -26,32 +24,24 @@ export default function AdminPage() {
   const [errorMessage, setErrorMessage] = useState('');
 
   const fileInputRefs = useRef({});
+  const migrationAttempted = useRef(false);
 
+  // Auto-migrate database records to Bento layout if old list-mv style is detected
   useEffect(() => {
-    async function load() {
-      const list = await getAllProperties();
-      setProperties(list);
+    if (migrationAttempted.current) return;
 
-      // Auto-migrate database records to Bento layout if old list-mv style is detected
-      const mvProperty = list.find(p => p.id === 'mountain-view');
-      if (mvProperty && mvProperty.investment && mvProperty.investment.style === 'list-mv') {
-        console.log("Stale Mountain View investment layout detected in Supabase. Auto-updating to Bento grid...");
-        const latestMv = propertiesData.find(p => p.id === 'mountain-view');
-        if (latestMv) {
-          const updatedMv = { ...mvProperty, investment: latestMv.investment };
-          try {
-            await saveProperty(updatedMv);
-            const newList = await getAllProperties();
-            setProperties(newList);
-            console.log("Supabase successfully migrated Mountain View to Bento investment layout.");
-          } catch (err) {
-            console.error("Failed to auto-migrate database record:", err);
-          }
-        }
-      }
-    }
-    load();
-  }, []);
+    const mvProperty = properties.find(p => p.id === 'mountain-view');
+    if (!mvProperty || !mvProperty.investment || mvProperty.investment.style !== 'list-mv') return;
+
+    const latestMv = propertiesData.find(p => p.id === 'mountain-view');
+    if (!latestMv) return;
+
+    migrationAttempted.current = true;
+    console.log("Stale Mountain View investment layout detected in Supabase. Auto-updating to Bento grid...");
+    savePropertyMutation.mutateAsync({ ...mvProperty, investment: latestMv.investment })
+      .then(() => console.log("Supabase successfully migrated Mountain View to Bento investment layout."))
+      .catch((err) => console.error("Failed to auto-migrate database record:", err));
+  }, [properties, savePropertyMutation]);
 
   const handleEditClick = (property) => {
     // Clone property to avoid directly modifying state before saving
@@ -67,9 +57,7 @@ export default function AdminPage() {
                          window.confirm("Are you sure you want to delete this leisure community? This action cannot be undone.");
     if (shouldDelete) {
       try {
-        await deleteProperty(id);
-        const list = await getAllProperties();
-        setProperties(list);
+        await deletePropertyMutation.mutateAsync(id);
       } catch (err) {
         alert("Failed to delete property: " + err.message);
       }
@@ -99,10 +87,8 @@ export default function AdminPage() {
     );
 
     try {
-      await saveProperty(newProject);
-      const list = await getAllProperties();
-      setProperties(list);
-      
+      await savePropertyMutation.mutateAsync(newProject);
+
       // Auto-open in editor
       setEditingProperty(newProject);
       setView('editor');
@@ -123,9 +109,7 @@ export default function AdminPage() {
       return;
     }
     try {
-      await saveProperty(editingProperty);
-      const list = await getAllProperties();
-      setProperties(list);
+      await savePropertyMutation.mutateAsync(editingProperty);
       setView('dashboard');
       setEditingProperty(null);
     } catch (err) {

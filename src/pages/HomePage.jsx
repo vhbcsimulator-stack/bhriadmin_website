@@ -3,11 +3,10 @@ import PageEditorShell, { AddItemButton, ItemActionsMenu } from '../components/P
 import { EditableText, EditableImage } from '../components/Editable';
 import IconSourceHint from '../components/IconSourceHint';
 import { resolveImage } from '../data/staticImages';
-import { getHomeContent, saveHomeContent } from '../data/homeContentManager';
 
 export default function HomePage() {
   return (
-    <PageEditorShell pageId="home" title="Home Page" getContent={getHomeContent} saveContent={saveHomeContent}>
+    <PageEditorShell pageId="home" title="Home Page">
       {({ content, editorMode, update, addItem, removeItem }) => (
         <>
           {/* Hero Section */}

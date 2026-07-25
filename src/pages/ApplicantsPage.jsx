@@ -1,12 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
-import {
-  getAllApplicants,
-  updateApplicantStatus,
-  deleteApplicant,
-  getApplicantFileUrl
-} from '../data/applicantsManager';
+import { getApplicantFileUrl } from '../data/applicantsManager';
+import { useApplicants, useUpdateApplicantStatus, useDeleteApplicant } from '../hooks/useApplicants';
 
 const STATUS_OPTIONS = ['new', 'reviewed', 'shortlisted', 'rejected', 'hired'];
 
@@ -19,35 +15,19 @@ const STATUS_STYLES = {
 };
 
 export default function ApplicantsPage() {
-  const [applicants, setApplicants] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const { data: applicants = [], isPending: loading, error: loadError } = useApplicants();
+  const updateStatusMutation = useUpdateApplicantStatus();
+  const deleteApplicantMutation = useDeleteApplicant();
+
   const [selected, setSelected] = useState(null);
   const [statusFilter, setStatusFilter] = useState('all');
   const [search, setSearch] = useState('');
 
-  const load = async () => {
-    setLoading(true);
-    try {
-      const list = await getAllApplicants();
-      setApplicants(list);
-      setError('');
-    } catch (err) {
-      console.error('Failed to load applicants:', err);
-      setError('Failed to load applicants: ' + err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    load();
-  }, []);
+  const error = loadError ? 'Failed to load applicants: ' + loadError.message : '';
 
   const handleStatusChange = async (id, status) => {
     try {
-      await updateApplicantStatus(id, status);
-      setApplicants((prev) => prev.map((a) => (a.id === id ? { ...a, status } : a)));
+      await updateStatusMutation.mutateAsync({ id, status });
       setSelected((prev) => (prev && prev.id === id ? { ...prev, status } : prev));
     } catch (err) {
       alert('Failed to update status: ' + err.message);
@@ -61,8 +41,7 @@ export default function ApplicantsPage() {
     if (!shouldDelete) return;
 
     try {
-      await deleteApplicant(applicant);
-      setApplicants((prev) => prev.filter((a) => a.id !== applicant.id));
+      await deleteApplicantMutation.mutateAsync(applicant);
       setSelected((prev) => (prev && prev.id === applicant.id ? null : prev));
     } catch (err) {
       alert('Failed to delete application: ' + err.message);

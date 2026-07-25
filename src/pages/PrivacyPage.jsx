@@ -1,11 +1,10 @@
 import React from 'react';
 import PageEditorShell, { AddItemButton, ItemActionsMenu } from '../components/PageEditorShell';
 import { EditableText } from '../components/Editable';
-import { getPrivacyContent, savePrivacyContent } from '../data/privacyContentManager';
 
 export default function PrivacyPage() {
   return (
-    <PageEditorShell pageId="privacy" title="Privacy Policy Page" getContent={getPrivacyContent} saveContent={savePrivacyContent}>
+    <PageEditorShell pageId="privacy" title="Privacy Policy Page">
       {({ content, editorMode, update, addItem, removeItem }) => (
         <main className="w-full">
           <section className="w-full bg-[#E8F5F0] py-section-gap">

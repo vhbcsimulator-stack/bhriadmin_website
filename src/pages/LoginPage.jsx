@@ -134,16 +134,7 @@ export default function LoginPage() {
         </form>
 
         {/* Credentials Helper Panel */}
-        <div className="mt-8 pt-6 border-t border-white/10 text-center">
-          <div className="inline-block bg-white/5 border border-white/10 px-4 py-2.5 rounded-xl">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-white/50 block mb-1">Demo Credentials</span>
-            <div className="text-xs text-white/80 font-mono flex items-center gap-1.5 justify-center">
-              <span>admin</span>
-              <span className="text-white/30">|</span>
-              <span>BHRI@2026</span>
-            </div>
-          </div>
-        </div>
+
 
       </div>
     </div>

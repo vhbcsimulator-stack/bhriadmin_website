@@ -15,7 +15,7 @@ const STATUS_STYLES = {
 };
 
 export default function ApplicantsPage() {
-  const { data: applicants = [], isPending: loading, error: loadError } = useApplicants();
+  const { data: applicants = [], isPending: loading, error: loadError, refetch, isFetching } = useApplicants();
   const updateStatusMutation = useUpdateApplicantStatus();
   const deleteApplicantMutation = useDeleteApplicant();
 
@@ -85,8 +85,16 @@ export default function ApplicantsPage() {
         </div>
 
         {error && (
-          <div className="bg-error-container text-on-error-container p-3.5 rounded-lg text-body-sm font-bold mb-4">
-            {error}
+          <div className="bg-error-container text-on-error-container p-4 rounded-lg text-body-sm mb-4 flex flex-col sm:flex-row sm:items-center gap-3">
+            <span className="material-symbols-outlined shrink-0">lock</span>
+            <span className="flex-grow">{error}</span>
+            <button
+              onClick={() => refetch()}
+              disabled={isFetching}
+              className="shrink-0 border border-on-error-container/40 px-4 py-1.5 rounded-lg font-bold cursor-pointer hover:bg-on-error-container hover:text-error-container transition-all disabled:opacity-50"
+            >
+              {isFetching ? 'Retrying...' : 'Retry'}
+            </button>
           </div>
         )}
 
@@ -167,7 +175,7 @@ export default function ApplicantsPage() {
             </tbody>
           </table>
 
-          {!loading && filtered.length === 0 && (
+          {!loading && !error && filtered.length === 0 && (
             <div className="text-center py-20 bg-surface">
               <span className="material-symbols-outlined text-outline text-6xl">person_search</span>
               <h3 className="font-headline-md text-2xl text-slate-text mt-4">No Applicants Found</h3>

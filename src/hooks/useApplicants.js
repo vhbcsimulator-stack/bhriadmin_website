@@ -6,6 +6,9 @@ export function useApplicants() {
   return useQuery({
     queryKey: queryKeys.applicants,
     queryFn: getAllApplicants,
+    // Failures here are permission/config problems rather than network blips,
+    // and the page offers an explicit Retry button.
+    retry: false,
   });
 }
 

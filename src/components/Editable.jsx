@@ -185,10 +185,9 @@ export function EditableImage({ src, onChange, className, alt, editorMode, aspec
     >
       <img src={src} className={className} alt={alt} />
 
-      {/* Edit Image Hover Overlay */}
+      {/* Edit Image Hover Overlay — visual only; the button below is the sole click target */}
       <div
-        onClick={() => !uploading && fileInputRef.current.click()}
-        className="absolute inset-0 bg-black/40 opacity-0 group-hover/image:opacity-100 transition-opacity flex flex-col items-center justify-center text-white z-20 cursor-pointer text-center"
+        className="absolute inset-0 bg-black/40 opacity-0 group-hover/image:opacity-100 transition-opacity flex flex-col items-center justify-center text-white z-20 pointer-events-none text-center"
       >
         {uploading ? (
           <div className="flex flex-col items-center gap-2">
@@ -200,11 +199,14 @@ export function EditableImage({ src, onChange, className, alt, editorMode, aspec
           </div>
         ) : (
           <>
-            <div className="bg-primary text-on-primary px-3 py-1.5 rounded-full shadow-md flex items-center gap-1.5 font-bold text-xs uppercase tracking-wider">
+            <button
+              onClick={() => !uploading && fileInputRef.current.click()}
+              className="bg-primary text-on-primary px-3 py-1.5 rounded-full shadow-md flex items-center gap-1.5 font-bold text-xs uppercase tracking-wider cursor-pointer hover:bg-primary/90 pointer-events-auto"
+            >
               <span className="material-symbols-outlined text-[16px]">cloud_upload</span>
               <span>Edit Image</span>
-            </div>
-            <span className="text-[10px] text-white/80 mt-1">Drag and drop or click</span>
+            </button>
+            <span className="text-[10px] text-white/80 mt-1">Drag and drop, or click the button</span>
           </>
         )}
       </div>

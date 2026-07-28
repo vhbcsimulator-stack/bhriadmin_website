@@ -3,7 +3,8 @@
 export const sitemapContentData = {
   hero: {
     title: 'Sitemap',
-    subtitle: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.'
+    subtitle: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.',
+    blocks: []
   },
   updatedAt: 'January 1, 2026',
   sections: [

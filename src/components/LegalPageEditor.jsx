@@ -44,15 +44,6 @@ export default function LegalPageEditor({
               editorMode={editorMode}
               placeholder="Hero Subtitle"
             />
-            <EditableText
-              value={content.updatedAt}
-              onChange={(value) => update('updatedAt', value)}
-              tagName="p"
-              className="font-body-sm text-body-sm text-on-surface-variant"
-              editorMode={editorMode}
-              placeholder="Last Updated Date"
-            />
-
             {heroParagraphs.length > 0 && (
               <div className="space-y-4 pt-2">
                 {heroParagraphs.map((paragraph, paragraphIndex) => (
@@ -125,6 +116,15 @@ export default function LegalPageEditor({
                 />
               </div>
             )}
+
+            <EditableText
+              value={content.updatedAt}
+              onChange={(value) => update('updatedAt', value)}
+              tagName="p"
+              className="font-body-sm text-body-sm text-on-surface-variant pt-2"
+              editorMode={editorMode}
+              placeholder="Last Updated Date"
+            />
           </div>
         </div>
       </section>

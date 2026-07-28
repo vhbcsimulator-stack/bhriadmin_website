@@ -19,6 +19,9 @@ export default function LegalPageEditor({
   addItem,
   removeItem,
 }) {
+  const heroParagraphs = Array.isArray(content.hero.paragraphs) ? content.hero.paragraphs : [];
+  const heroBullets = Array.isArray(content.hero.bullets) ? content.hero.bullets : [];
+
   return (
     <main className="w-full">
       <section className="w-full bg-[#E8F5F0] py-section-gap">
@@ -49,6 +52,79 @@ export default function LegalPageEditor({
               editorMode={editorMode}
               placeholder="Last Updated Date"
             />
+
+            {heroParagraphs.length > 0 && (
+              <div className="space-y-4 pt-2">
+                {heroParagraphs.map((paragraph, paragraphIndex) => (
+                  <div
+                    key={paragraphIndex}
+                    className={`relative ${editorMode === 'edit' ? 'pr-10' : ''}`}
+                  >
+                    <EditableText
+                      value={paragraph}
+                      onChange={(value) => update(`hero.paragraphs.${paragraphIndex}`, value)}
+                      tagName="p"
+                      className="font-body-md text-body-md text-on-surface-variant leading-relaxed max-w-2xl"
+                      isTextArea
+                      editorMode={editorMode}
+                      placeholder={`Hero Paragraph ${paragraphIndex + 1}`}
+                    />
+                    {editorMode === 'edit' && (
+                      <ItemActionsMenu
+                        className="absolute top-2 right-0"
+                        onDelete={() => removeItem('hero.paragraphs', paragraphIndex)}
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {heroBullets.length > 0 && (
+              <ul className="list-disc pl-6 space-y-2 text-on-surface-variant max-w-2xl">
+                {heroBullets.map((bullet, bulletIndex) => (
+                  <li
+                    key={bulletIndex}
+                    className={`relative ${editorMode === 'edit' ? 'pr-10' : ''}`}
+                  >
+                    <EditableText
+                      value={bullet}
+                      onChange={(value) => update(`hero.bullets.${bulletIndex}`, value)}
+                      tagName="span"
+                      className="font-body-md text-body-md leading-relaxed"
+                      isTextArea
+                      editorMode={editorMode}
+                      placeholder={`Hero Bullet ${bulletIndex + 1}`}
+                    />
+                    {editorMode === 'edit' && (
+                      <ItemActionsMenu
+                        className="absolute top-1 right-0"
+                        onDelete={() => removeItem('hero.bullets', bulletIndex)}
+                      />
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {editorMode === 'edit' && (
+              <div className="flex flex-wrap gap-2 pt-2">
+                <AddItemButton
+                  label="Add Hero Paragraph"
+                  onClick={() => update('hero.paragraphs', [
+                    ...heroParagraphs,
+                    'New hero paragraph text.',
+                  ])}
+                />
+                <AddItemButton
+                  label="Add Hero Bullet"
+                  onClick={() => update('hero.bullets', [
+                    ...heroBullets,
+                    'New hero bullet point.',
+                  ])}
+                />
+              </div>
+            )}
           </div>
         </div>
       </section>

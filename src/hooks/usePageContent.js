@@ -1,8 +1,7 @@
 import { useCallback } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '../lib/queryKeys';
-import { fetchAllPageContent, mergeWithDefaults, persistPageContent } from '../data/contentStore';
-import { PAGE_CONTENT_DEFAULTS } from '../data/pageContentRegistry';
+import { fetchAllPageContent, persistPageContent } from '../data/contentStore';
 
 const siteContentQuery = {
   queryKey: queryKeys.siteContent,
@@ -11,13 +10,10 @@ const siteContentQuery = {
 
 // Content for a single page editor. Every page shares the same query key, so
 // the table is fetched once and later editors read straight from the cache.
+// What Supabase stores is what the editor shows — no code defaults are merged
+// in, so a page with no row yet resolves to null.
 export function usePageContent(pageId) {
-  const defaults = PAGE_CONTENT_DEFAULTS[pageId];
-
-  const select = useCallback(
-    (all) => mergeWithDefaults(defaults, all[pageId]),
-    [defaults, pageId]
-  );
+  const select = useCallback((all) => all[pageId] ?? null, [pageId]);
 
   return useQuery({ ...siteContentQuery, select });
 }

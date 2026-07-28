@@ -1,16 +1,4 @@
 import { supabase } from '../supabaseClient';
-import { propertiesData } from './propertiesData';
-
-// Self-cleaning check for stale cache (old investment style)
-try {
-  const localData = localStorage.getItem('bhri_properties');
-  if (localData) {
-    const parsed = JSON.parse(localData);
-    if (Array.isArray(parsed) && parsed.some(p => p.investment && p.investment.style === 'list-mv')) {
-      localStorage.removeItem('bhri_properties');
-    }
-  }
-} catch (e) {}
 
 // Map database column names (snake_case) to client properties (camelCase)
 const mapDbToProperty = (dbRow) => {
@@ -62,196 +50,57 @@ const mapPropertyToDb = (property) => {
   };
 };
 
+// Supabase is the only store for properties. Reads and writes surface their
+// errors to the caller instead of falling back to a local copy, so the admin
+// never edits or displays data that is out of sync with the database.
 export const getAllProperties = async () => {
-  try {
-    const localData = localStorage.getItem('bhri_properties');
-    
-    const { data, error } = await supabase
-      .from('properties')
-      .select('*')
-      .order('created_at', { ascending: true });
-      
-    if (error) {
-      console.error("Failed to fetch properties from Supabase, falling back to local data:", error);
-      if (localData) {
-        try { return JSON.parse(localData); } catch (e) {}
-      }
-      return propertiesData;
-    }
-    
-    if (!data || data.length === 0) {
-      console.log("No properties found in Supabase database.");
-      if (localData) {
-        try { return JSON.parse(localData); } catch (e) {}
-      }
-      return [];
-    }
-    
-    const mapped = data.map(mapDbToProperty);
-    localStorage.setItem('bhri_properties', JSON.stringify(mapped));
-    return mapped;
-  } catch (e) {
-    console.error("Exception fetching properties:", e);
-    const localData = localStorage.getItem('bhri_properties');
-    if (localData) {
-      try { return JSON.parse(localData); } catch (e) {}
-    }
-    return propertiesData;
-  }
-};
+  const { data, error } = await supabase
+    .from('properties')
+    .select('*')
+    .order('created_at', { ascending: true });
 
-export const getPropertyById = async (id) => {
-  try {
-    const { data, error } = await supabase
-      .from('properties')
-      .select('*')
-      .eq('id', id)
-      .maybeSingle();
-      
-    if (error) {
-      console.error(`Failed to fetch property ${id} from Supabase, falling back to local data:`, error);
-      const localData = localStorage.getItem('bhri_properties');
-      if (localData) {
-        try {
-          const list = JSON.parse(localData);
-          const item = list.find(p => p.id === id);
-          if (item) return item;
-        } catch (e) {}
-      }
-      return propertiesData.find(p => p.id === id) || null;
-    }
-    
-    if (!data) return null;
-    return mapDbToProperty(data);
-  } catch (e) {
-    console.error("Exception fetching property by id:", e);
-    const localData = localStorage.getItem('bhri_properties');
-    if (localData) {
-      try {
-        const list = JSON.parse(localData);
-        const item = list.find(p => p.id === id);
-        if (item) return item;
-      } catch (err) {}
-    }
-    return propertiesData.find(p => p.id === id) || null;
-  }
+  if (error) throw error;
+
+  return (data || []).map(mapDbToProperty);
 };
 
 export const saveProperty = async (property) => {
-  // Sync to localStorage
-  try {
-    const localData = localStorage.getItem('bhri_properties');
-    let list = [];
-    if (localData) {
-      try { list = JSON.parse(localData); } catch (e) {}
-    }
-    if (!list || list.length === 0) {
-      list = [...propertiesData];
-    }
-    const idx = list.findIndex(p => p.id === property.id);
-    if (idx !== -1) {
-      list[idx] = property;
-    } else {
-      list.push(property);
-    }
-    localStorage.setItem('bhri_properties', JSON.stringify(list));
-  } catch (e) {
-    console.error("Failed to save to localStorage:", e);
-  }
+  const { error } = await supabase
+    .from('properties')
+    .upsert(mapPropertyToDb(property));
 
-  // Save to Supabase
-  const dbData = mapPropertyToDb(property);
-  try {
-    const { error } = await supabase
-      .from('properties')
-      .upsert(dbData);
-      
-    if (error) {
-      console.error("Failed to save property in Supabase:", error);
-      // If it is a fetch or placeholder-related error, do not block the editor (log it instead)
-      if (error.message && (error.message.includes('fetch') || error.message.includes('placeholder') || error.message.includes('network'))) {
-        console.warn("Offline fallback saved to localStorage successfully.");
-        return;
-      }
-      throw error;
-    }
-  } catch (err) {
-    console.error("Supabase upsert threw exception:", err);
-    // Ignore fetch or network exceptions to allow offline mode saving
-    if (err.message && (err.message.includes('fetch') || err.message.includes('network') || err.message.includes('Failed to fetch'))) {
-      console.warn("Offline fallback saved to localStorage successfully after network exception.");
-      return;
-    }
-    throw err;
-  }
+  if (error) throw error;
 };
 
 export const deleteProperty = async (id) => {
-  // Sync delete from localStorage
-  try {
-    const localData = localStorage.getItem('bhri_properties');
-    if (localData) {
-      try {
-        let list = JSON.parse(localData);
-        list = list.filter(p => p.id !== id);
-        localStorage.setItem('bhri_properties', JSON.stringify(list));
-      } catch (e) {}
-    }
-  } catch (e) {
-    console.error("Failed to delete from localStorage:", e);
-  }
+  const { error } = await supabase
+    .from('properties')
+    .delete()
+    .eq('id', id);
 
-  // Delete from Supabase
-  try {
-    const { error } = await supabase
-      .from('properties')
-      .delete()
-      .eq('id', id);
-      
-    if (error) {
-      console.error(`Failed to delete property ${id} from Supabase:`, error);
-      if (error.message && (error.message.includes('fetch') || error.message.includes('placeholder') || error.message.includes('network'))) {
-        console.warn("Offline fallback deleted from localStorage successfully.");
-        return;
-      }
-      throw error;
-    }
-  } catch (err) {
-    console.error("Supabase delete threw exception:", err);
-    if (err.message && (err.message.includes('fetch') || err.message.includes('network') || err.message.includes('Failed to fetch'))) {
-      console.warn("Offline fallback deleted from localStorage successfully after network exception.");
-      return;
-    }
-    throw err;
-  }
+  if (error) throw error;
 };
 
 // Upload media file to Supabase storage bucket
 export const uploadMedia = async (file) => {
-  try {
-    const fileExt = file.name.split('.').pop();
-    const cleanFileName = `${Date.now()}-${Math.random().toString(36).substring(2, 15)}.${fileExt}`;
-    
-    const { data, error } = await supabase.storage
-      .from('properties-media')
-      .upload(cleanFileName, file);
-      
-    if (error) {
-      throw error;
-    }
-    
-    const { data: publicUrlData } = supabase.storage
-      .from('properties-media')
-      .getPublicUrl(cleanFileName);
-      
-    return publicUrlData.publicUrl;
-  } catch (e) {
-    console.error("Storage upload error:", e);
-    throw e;
-  }
+  const fileExt = file.name.split('.').pop();
+  const cleanFileName = `${Date.now()}-${Math.random().toString(36).substring(2, 15)}.${fileExt}`;
+
+  const { error } = await supabase.storage
+    .from('properties-media')
+    .upload(cleanFileName, file);
+
+  if (error) throw error;
+
+  const { data: publicUrlData } = supabase.storage
+    .from('properties-media')
+    .getPublicUrl(cleanFileName);
+
+  return publicUrlData.publicUrl;
 };
 
-// Create a template structure for a new property
+// Starting structure for a brand-new property. This is a create-new seed the
+// admin edits and saves to Supabase, not a fallback for existing records.
 export const createDefaultPropertyTemplate = (id, title, location) => {
   return {
     id: id,

@@ -12,7 +12,7 @@ const getDeep = (obj, path) => path.split('.').reduce((cur, key) => cur[key], ob
 // Provides update/addItem/removeItem helpers and a sticky toolbar with
 // Edit/Preview toggle and Save.
 export default function PageEditorShell({ pageId, title, children }) {
-  const { data: savedContent } = usePageContent(pageId);
+  const { data: savedContent, isPending, isError, error, refetch } = usePageContent(pageId);
   const saveMutation = useSavePageContent(pageId);
 
   const [draft, setDraft] = useState(null);
@@ -117,9 +117,27 @@ export default function PageEditorShell({ pageId, title, children }) {
       <div className="flex-grow w-full">
         {content ? (
           children({ content, editorMode, update, addItem, removeItem, handleSave, saveState })
-        ) : (
+        ) : isPending ? (
           <div className="flex items-center justify-center py-32">
             <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center py-32 px-margin-page text-center gap-3">
+            <span className="material-symbols-outlined text-outline text-5xl">cloud_off</span>
+            <h2 className="font-headline-md text-xl text-primary">
+              {isError ? 'Could not load content' : `No content stored for "${pageId}"`}
+            </h2>
+            <p className="font-body-md text-body-md text-on-surface-variant max-w-md">
+              {isError
+                ? error?.message || 'Supabase did not return the site content.'
+                : `Supabase has no site_content row with id "${pageId}" yet. Add the row in Supabase to start editing this page.`}
+            </p>
+            <button
+              onClick={() => refetch()}
+              className="mt-1 bg-primary text-on-primary px-6 py-2 rounded-lg font-subhead-sm hover:bg-primary-container hover:text-on-primary-container transition-colors cursor-pointer text-sm"
+            >
+              Retry
+            </button>
           </div>
         )}
       </div>

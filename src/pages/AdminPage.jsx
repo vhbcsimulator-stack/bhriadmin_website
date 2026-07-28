@@ -1,16 +1,15 @@
-﻿import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import { EditableText, EditableImage } from '../components/Editable';
 import { createDefaultPropertyTemplate } from '../data/propertiesManager';
 import { useProperties, useSaveProperty, useDeleteProperty } from '../hooks/useProperties';
-import { propertiesData } from '../data/propertiesData';
 
 
 export default function AdminPage() {
   const navigate = useNavigate();
-  const { data: properties = [] } = useProperties();
+  const { data: properties = [], isPending, isError, error, refetch } = useProperties();
   const savePropertyMutation = useSaveProperty();
   const deletePropertyMutation = useDeleteProperty();
   const [view, setView] = useState('dashboard'); // 'dashboard' | 'editor'
@@ -24,24 +23,6 @@ export default function AdminPage() {
   const [errorMessage, setErrorMessage] = useState('');
 
   const fileInputRefs = useRef({});
-  const migrationAttempted = useRef(false);
-
-  // Auto-migrate database records to Bento layout if old list-mv style is detected
-  useEffect(() => {
-    if (migrationAttempted.current) return;
-
-    const mvProperty = properties.find(p => p.id === 'mountain-view');
-    if (!mvProperty || !mvProperty.investment || mvProperty.investment.style !== 'list-mv') return;
-
-    const latestMv = propertiesData.find(p => p.id === 'mountain-view');
-    if (!latestMv) return;
-
-    migrationAttempted.current = true;
-    console.log("Stale Mountain View investment layout detected in Supabase. Auto-updating to Bento grid...");
-    savePropertyMutation.mutateAsync({ ...mvProperty, investment: latestMv.investment })
-      .then(() => console.log("Supabase successfully migrated Mountain View to Bento investment layout."))
-      .catch((err) => console.error("Failed to auto-migrate database record:", err));
-  }, [properties, savePropertyMutation]);
 
   const handleEditClick = (property) => {
     // Clone property to avoid directly modifying state before saving
@@ -53,8 +34,8 @@ export default function AdminPage() {
 
   const handleDeleteClick = async (id) => {
     const shouldDelete = window.bypassConfirm || 
-                         new URLSearchParams(window.location.search).get('bypassConfirm') === 'true' ||
-                         window.confirm("Are you sure you want to delete this leisure community? This action cannot be undone.");
+      new URLSearchParams(window.location.search).get('bypassConfirm') === 'true' ||
+      window.confirm("Are you sure you want to delete this leisure community? This action cannot be undone.");
     if (shouldDelete) {
       try {
         await deletePropertyMutation.mutateAsync(id);
@@ -335,7 +316,29 @@ export default function AdminPage() {
                 </tbody>
               </table>
               
-              {properties.length === 0 && (
+              {isPending && (
+                <div className="flex items-center justify-center py-20 bg-surface">
+                  <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+                </div>
+              )}
+
+              {isError && (
+                <div className="text-center py-20 bg-surface">
+                  <span className="material-symbols-outlined text-outline text-6xl">cloud_off</span>
+                  <h3 className="font-headline-md text-2xl text-slate-text mt-4">Could not load projects</h3>
+                  <p className="font-body-md text-on-surface-variant mt-2">
+                    {error?.message || 'Supabase did not return the properties table.'}
+                  </p>
+                  <button
+                    onClick={() => refetch()}
+                    className="mt-4 bg-primary text-on-primary px-6 py-2 rounded-lg font-subhead-sm hover:bg-primary-container hover:text-on-primary-container transition-colors cursor-pointer text-sm"
+                  >
+                    Retry
+                  </button>
+                </div>
+              )}
+
+              {!isPending && !isError && properties.length === 0 && (
                 <div className="text-center py-20 bg-surface">
                   <span className="material-symbols-outlined text-outline text-6xl">home_work</span>
                   <h3 className="font-headline-md text-2xl text-slate-text mt-4">No Projects Available</h3>

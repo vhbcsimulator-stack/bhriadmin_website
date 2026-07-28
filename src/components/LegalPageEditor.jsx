@@ -1,16 +1,113 @@
 import { AddItemButton, ItemActionsMenu } from './PageEditorShell';
 import { EditableText } from './Editable';
 
-const getParagraphs = (section) => {
-  if (Array.isArray(section.paragraphs) && section.paragraphs.length > 0) {
-    return section.paragraphs;
-  }
+const getBlocks = (content, includeLegacyBody = false) => {
+  if (Array.isArray(content.blocks)) return content.blocks;
 
-  return String(section.body || '')
-    .split(/\n\s*\n/)
-    .map((paragraph) => paragraph.trim())
-    .filter(Boolean);
+  const paragraphs = Array.isArray(content.paragraphs)
+    ? content.paragraphs
+    : includeLegacyBody
+      ? String(content.body || '')
+        .split(/\n\s*\n/)
+        .map((text) => text.trim())
+        .filter(Boolean)
+      : [];
+  const bullets = Array.isArray(content.bullets) ? content.bullets : [];
+
+  return [
+    ...paragraphs.map((text) => ({ type: 'paragraph', text })),
+    ...bullets.map((text) => ({ type: 'bullet', text })),
+  ];
 };
+
+function OrderedContentBlocks({
+  blocks,
+  basePath,
+  editorMode,
+  update,
+  paragraphClassName = '',
+}) {
+  return (
+    <div className="space-y-4">
+      {blocks.map((block, index) => (
+        <div
+          key={index}
+          className={`relative ${editorMode === 'edit' ? 'pr-10' : ''}`}
+        >
+          {block.type === 'bullet' ? (
+            <ul className="list-disc pl-6 text-on-surface-variant">
+              <li>
+                <EditableText
+                  value={block.text}
+                  onChange={(value) => update(
+                    `${basePath}.blocks`,
+                    blocks.map((item, blockIndex) => (
+                      blockIndex === index ? { ...item, text: value } : item
+                    )),
+                  )}
+                  tagName="span"
+                  className="font-body-md text-body-md leading-relaxed"
+                  isTextArea
+                  editorMode={editorMode}
+                  placeholder="Bullet point"
+                />
+              </li>
+            </ul>
+          ) : (
+            <EditableText
+              value={block.text}
+              onChange={(value) => update(
+                `${basePath}.blocks`,
+                blocks.map((item, blockIndex) => (
+                  blockIndex === index ? { ...item, text: value } : item
+                )),
+              )}
+              tagName="p"
+              className={`font-body-md text-body-md text-on-surface-variant leading-relaxed ${paragraphClassName}`}
+              isTextArea
+              editorMode={editorMode}
+              placeholder="Paragraph"
+            />
+          )}
+
+          {editorMode === 'edit' && (
+            <ItemActionsMenu
+              className="absolute top-1 right-0"
+              onDelete={() => update(
+                `${basePath}.blocks`,
+                blocks.filter((_, blockIndex) => blockIndex !== index),
+              )}
+            />
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function BlockAddButtons({ blocks, basePath, labelPrefix = '', update }) {
+  const prefix = labelPrefix ? `${labelPrefix} ` : '';
+  const placeholderPrefix = labelPrefix ? `New ${labelPrefix.toLowerCase()}` : 'New';
+
+  return (
+    <div className="flex flex-wrap gap-2 pt-2">
+      <AddItemButton
+        label={`Add ${prefix}Paragraph`}
+        onClick={() => update(`${basePath}.blocks`, [
+          ...blocks,
+          { type: 'paragraph', text: `${placeholderPrefix} paragraph text.` },
+        ])}
+      />
+      <AddItemButton
+        label={`Add ${prefix}Bullet`}
+        onClick={() => update(`${basePath}.blocks`, [
+          ...blocks,
+          { type: 'bullet', text: `${placeholderPrefix} bullet point.` },
+        ])}
+      />
+    </div>
+  );
+}
 
 export default function LegalPageEditor({
   content,
@@ -19,8 +116,7 @@ export default function LegalPageEditor({
   addItem,
   removeItem,
 }) {
-  const heroParagraphs = Array.isArray(content.hero.paragraphs) ? content.hero.paragraphs : [];
-  const heroBullets = Array.isArray(content.hero.bullets) ? content.hero.bullets : [];
+  const heroBlocks = getBlocks(content.hero);
 
   return (
     <main className="w-full">
@@ -44,77 +140,24 @@ export default function LegalPageEditor({
               editorMode={editorMode}
               placeholder="Hero Subtitle"
             />
-            {heroParagraphs.length > 0 && (
-              <div className="space-y-4 pt-2">
-                {heroParagraphs.map((paragraph, paragraphIndex) => (
-                  <div
-                    key={paragraphIndex}
-                    className={`relative ${editorMode === 'edit' ? 'pr-10' : ''}`}
-                  >
-                    <EditableText
-                      value={paragraph}
-                      onChange={(value) => update(`hero.paragraphs.${paragraphIndex}`, value)}
-                      tagName="p"
-                      className="font-body-md text-body-md text-on-surface-variant leading-relaxed max-w-2xl"
-                      isTextArea
-                      editorMode={editorMode}
-                      placeholder={`Hero Paragraph ${paragraphIndex + 1}`}
-                    />
-                    {editorMode === 'edit' && (
-                      <ItemActionsMenu
-                        className="absolute top-2 right-0"
-                        onDelete={() => removeItem('hero.paragraphs', paragraphIndex)}
-                      />
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
 
-            {heroBullets.length > 0 && (
-              <ul className="list-disc pl-6 space-y-2 text-on-surface-variant max-w-2xl">
-                {heroBullets.map((bullet, bulletIndex) => (
-                  <li
-                    key={bulletIndex}
-                    className={`relative ${editorMode === 'edit' ? 'pr-10' : ''}`}
-                  >
-                    <EditableText
-                      value={bullet}
-                      onChange={(value) => update(`hero.bullets.${bulletIndex}`, value)}
-                      tagName="span"
-                      className="font-body-md text-body-md leading-relaxed"
-                      isTextArea
-                      editorMode={editorMode}
-                      placeholder={`Hero Bullet ${bulletIndex + 1}`}
-                    />
-                    {editorMode === 'edit' && (
-                      <ItemActionsMenu
-                        className="absolute top-1 right-0"
-                        onDelete={() => removeItem('hero.bullets', bulletIndex)}
-                      />
-                    )}
-                  </li>
-                ))}
-              </ul>
+            {heroBlocks.length > 0 && (
+              <OrderedContentBlocks
+                blocks={heroBlocks}
+                basePath="hero"
+                editorMode={editorMode}
+                update={update}
+                paragraphClassName="max-w-2xl"
+              />
             )}
 
             {editorMode === 'edit' && (
-              <div className="flex flex-wrap gap-2 pt-2">
-                <AddItemButton
-                  label="Add Hero Paragraph"
-                  onClick={() => update('hero.paragraphs', [
-                    ...heroParagraphs,
-                    'New hero paragraph text.',
-                  ])}
-                />
-                <AddItemButton
-                  label="Add Hero Bullet"
-                  onClick={() => update('hero.bullets', [
-                    ...heroBullets,
-                    'New hero bullet point.',
-                  ])}
-                />
-              </div>
+              <BlockAddButtons
+                blocks={heroBlocks}
+                basePath="hero"
+                labelPrefix="Hero"
+                update={update}
+              />
             )}
 
             <EditableText
@@ -131,8 +174,8 @@ export default function LegalPageEditor({
 
       <section className="max-w-3xl mx-auto px-margin-page py-section-gap space-y-stack-lg">
         {content.sections.map((section, sectionIndex) => {
-          const paragraphs = getParagraphs(section);
-          const bullets = Array.isArray(section.bullets) ? section.bullets : [];
+          const blocks = getBlocks(section, true);
+          const basePath = `sections.${sectionIndex}`;
 
           return (
             <div
@@ -141,89 +184,28 @@ export default function LegalPageEditor({
             >
               <EditableText
                 value={section.heading}
-                onChange={(value) => update(`sections.${sectionIndex}.heading`, value)}
+                onChange={(value) => update(`${basePath}.heading`, value)}
                 tagName="h2"
                 className="font-headline-md text-headline-md text-primary"
                 editorMode={editorMode}
                 placeholder="Section Heading"
               />
 
-              <div className="space-y-4">
-                {paragraphs.map((paragraph, paragraphIndex) => (
-                  <div
-                    key={paragraphIndex}
-                    className={`relative ${editorMode === 'edit' ? 'pr-10' : ''}`}
-                  >
-                    <EditableText
-                      value={paragraph}
-                      onChange={(value) => {
-                        const next = [...paragraphs];
-                        next[paragraphIndex] = value;
-                        update(`sections.${sectionIndex}.paragraphs`, next);
-                      }}
-                      tagName="p"
-                      className="font-body-md text-body-md text-on-surface-variant leading-relaxed"
-                      isTextArea
-                      editorMode={editorMode}
-                      placeholder={`Paragraph ${paragraphIndex + 1}`}
-                    />
-                    {editorMode === 'edit' && paragraphs.length > 1 && (
-                      <ItemActionsMenu
-                        className="absolute top-2 right-0"
-                        onDelete={() => {
-                          const next = paragraphs.filter((_, index) => index !== paragraphIndex);
-                          update(`sections.${sectionIndex}.paragraphs`, next);
-                        }}
-                      />
-                    )}
-                  </div>
-                ))}
-              </div>
-
-              {bullets.length > 0 && (
-                <ul className="list-disc pl-6 space-y-2 text-on-surface-variant">
-                  {bullets.map((bullet, bulletIndex) => (
-                    <li
-                      key={bulletIndex}
-                      className={`relative ${editorMode === 'edit' ? 'pr-10' : ''}`}
-                    >
-                      <EditableText
-                        value={bullet}
-                        onChange={(value) => update(`sections.${sectionIndex}.bullets.${bulletIndex}`, value)}
-                        tagName="span"
-                        className="font-body-md text-body-md leading-relaxed"
-                        isTextArea
-                        editorMode={editorMode}
-                        placeholder={`Bullet ${bulletIndex + 1}`}
-                      />
-                      {editorMode === 'edit' && (
-                        <ItemActionsMenu
-                          className="absolute top-1 right-0"
-                          onDelete={() => removeItem(`sections.${sectionIndex}.bullets`, bulletIndex)}
-                        />
-                      )}
-                    </li>
-                  ))}
-                </ul>
+              {blocks.length > 0 && (
+                <OrderedContentBlocks
+                  blocks={blocks}
+                  basePath={basePath}
+                  editorMode={editorMode}
+                  update={update}
+                />
               )}
 
               {editorMode === 'edit' && (
-                <div className="flex flex-wrap gap-2 pt-2">
-                  <AddItemButton
-                    label="Add Paragraph"
-                    onClick={() => update(
-                      `sections.${sectionIndex}.paragraphs`,
-                      [...paragraphs, 'New paragraph text.'],
-                    )}
-                  />
-                  <AddItemButton
-                    label="Add Bullet"
-                    onClick={() => update(
-                      `sections.${sectionIndex}.bullets`,
-                      [...bullets, 'New bullet point.'],
-                    )}
-                  />
-                </div>
+                <BlockAddButtons
+                  blocks={blocks}
+                  basePath={basePath}
+                  update={update}
+                />
               )}
 
               {editorMode === 'edit' && (
@@ -238,8 +220,7 @@ export default function LegalPageEditor({
             label="Add Section"
             onClick={() => addItem('sections', {
               heading: 'New Section',
-              paragraphs: ['Section paragraph text.'],
-              bullets: [],
+              blocks: [{ type: 'paragraph', text: 'Section paragraph text.' }],
             })}
           />
         )}

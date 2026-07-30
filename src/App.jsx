@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import React, { useState, useEffect, useMemo } from 'react';
+import { createBrowserRouter, RouterProvider, Navigate } from 'react-router-dom';
 import AdminPage from './pages/AdminPage';
 import ApplicantsPage from './pages/ApplicantsPage';
 import LoginPage from './pages/LoginPage';
@@ -13,6 +13,29 @@ import TermsPage from './pages/TermsPage';
 import CookiesPage from './pages/CookiesPage';
 import SitemapPage from './pages/SitemapPage';
 import { supabase } from './supabaseClient';
+
+// Route table. Built as a data router (createBrowserRouter) rather than
+// <BrowserRouter>, because the editors' unsaved-changes guard relies on
+// useBlocker, which only works inside a data router.
+const buildRouter = (isAuthed) => {
+  const guarded = (element) => (isAuthed ? element : <Navigate to="/login" replace />);
+
+  return createBrowserRouter([
+    { path: '/login', element: isAuthed ? <Navigate to="/" replace /> : <LoginPage /> },
+    { path: '/', element: guarded(<HomePage />) },
+    { path: '/properties', element: guarded(<AdminPage />) },
+    { path: '/about', element: guarded(<AboutPage />) },
+    { path: '/contact', element: guarded(<ContactPage />) },
+    { path: '/careers', element: guarded(<CareerPage />) },
+    { path: '/careers/:jobId', element: guarded(<JobDetailsPage />) },
+    { path: '/applicants', element: guarded(<ApplicantsPage />) },
+    { path: '/privacy', element: guarded(<PrivacyPage />) },
+    { path: '/terms', element: guarded(<TermsPage />) },
+    { path: '/cookies', element: guarded(<CookiesPage />) },
+    { path: '/sitemap', element: guarded(<SitemapPage />) },
+    { path: '*', element: <Navigate to="/" replace /> },
+  ]);
+};
 
 function App() {
   const [session, setSession] = useState(null);
@@ -46,6 +69,12 @@ function App() {
     };
   }, []);
 
+  // Keyed on the boolean, not the session object: token refreshes hand back a
+  // new session object, and rebuilding the router there would remount the
+  // current editor and throw away the admin's unsaved draft.
+  const isAuthed = !!session;
+  const router = useMemo(() => buildRouter(isAuthed), [isAuthed]);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center">
@@ -54,61 +83,7 @@ function App() {
     );
   }
 
-  return (
-    <BrowserRouter>
-      <Routes>
-        <Route 
-          path="/login" 
-          element={session ? <Navigate to="/" replace /> : <LoginPage />} 
-        />
-        <Route
-          path="/"
-          element={session ? <HomePage /> : <Navigate to="/login" replace />}
-        />
-        <Route
-          path="/properties"
-          element={session ? <AdminPage /> : <Navigate to="/login" replace />}
-        />
-        <Route
-          path="/about"
-          element={session ? <AboutPage /> : <Navigate to="/login" replace />}
-        />
-        <Route
-          path="/contact"
-          element={session ? <ContactPage /> : <Navigate to="/login" replace />}
-        />
-        <Route
-          path="/careers"
-          element={session ? <CareerPage /> : <Navigate to="/login" replace />}
-        />
-        <Route
-          path="/careers/:jobId"
-          element={session ? <JobDetailsPage /> : <Navigate to="/login" replace />}
-        />
-        <Route
-          path="/applicants"
-          element={session ? <ApplicantsPage /> : <Navigate to="/login" replace />}
-        />
-        <Route
-          path="/privacy"
-          element={session ? <PrivacyPage /> : <Navigate to="/login" replace />}
-        />
-        <Route
-          path="/terms"
-          element={session ? <TermsPage /> : <Navigate to="/login" replace />}
-        />
-        <Route
-          path="/cookies"
-          element={session ? <CookiesPage /> : <Navigate to="/login" replace />}
-        />
-        <Route
-          path="/sitemap"
-          element={session ? <SitemapPage /> : <Navigate to="/login" replace />}
-        />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </BrowserRouter>
-  );
+  return <RouterProvider router={router} />;
 }
 
 export default App;

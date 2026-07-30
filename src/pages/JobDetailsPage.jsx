@@ -2,8 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
+import UndoRedoButtons from '../components/UndoRedoButtons';
+import UnsavedChangesModal from '../components/UnsavedChangesModal';
 import { EditableText } from '../components/Editable';
 import { usePageContent, useSavePageContent } from '../hooks/usePageContent';
+import useEditorDraft from '../hooks/useEditorDraft';
+import useUnsavedChangesPrompt from '../hooks/useUnsavedChangesPrompt';
 
 export default function JobDetailsPage() {
   const { jobId } = useParams();
@@ -13,7 +17,9 @@ export default function JobDetailsPage() {
   const { data: savedCareer } = usePageContent('career');
   const saveMutation = useSavePageContent('career');
 
-  const [draft, setDraft] = useState(null);
+  const { draft, commit, undo, redo, reset, canUndo, canRedo, isDirty } = useEditorDraft(savedCareer);
+  const prompt = useUnsavedChangesPrompt(isDirty);
+
   const [editorMode, setEditorMode] = useState('edit');
   const [justSaved, setJustSaved] = useState(false);
 
@@ -27,10 +33,43 @@ export default function JobDetailsPage() {
     }
   }, [savedCareer, jobId, navigate]);
 
+  const handleSave = async () => {
+    try {
+      await saveMutation.mutateAsync(career);
+      reset();
+      setJustSaved(true);
+      setTimeout(() => setJustSaved(false), 2000);
+      return true;
+    } catch (err) {
+      alert("Failed to save changes: " + err.message);
+      return false;
+    }
+  };
+
+  const handleSaveAndLeave = async () => {
+    if (await handleSave()) prompt.release();
+  };
+
+  const handleDiscardAndLeave = () => {
+    reset();
+    prompt.release();
+  };
+
+  const unsavedModal = (
+    <UnsavedChangesModal
+      open={prompt.isPrompting}
+      saving={saveMutation.isPending}
+      onSave={handleSaveAndLeave}
+      onDiscard={handleDiscardAndLeave}
+      onCancel={prompt.dismiss}
+    />
+  );
+
   if (!career || roleIndex === -1) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+        {unsavedModal}
       </div>
     );
   }
@@ -38,24 +77,24 @@ export default function JobDetailsPage() {
   const role = career.roles.items[roleIndex];
 
   const updateRole = (field, value) => {
-    setDraft((prev) => {
-      const next = structuredClone(prev ?? savedCareer);
+    commit((current) => {
+      const next = structuredClone(current);
       next.roles.items[roleIndex][field] = value;
       return next;
     });
   };
 
   const updateListItem = (field, index, value) => {
-    setDraft((prev) => {
-      const next = structuredClone(prev ?? savedCareer);
+    commit((current) => {
+      const next = structuredClone(current);
       next.roles.items[roleIndex][field][index] = value;
       return next;
     });
   };
 
   const addListItem = (field) => {
-    setDraft((prev) => {
-      const next = structuredClone(prev ?? savedCareer);
+    commit((current) => {
+      const next = structuredClone(current);
       if (!next.roles.items[roleIndex][field]) next.roles.items[roleIndex][field] = [];
       next.roles.items[roleIndex][field].push('New item');
       return next;
@@ -63,22 +102,11 @@ export default function JobDetailsPage() {
   };
 
   const removeListItem = (field, index) => {
-    setDraft((prev) => {
-      const next = structuredClone(prev ?? savedCareer);
+    commit((current) => {
+      const next = structuredClone(current);
       next.roles.items[roleIndex][field].splice(index, 1);
       return next;
     });
-  };
-
-  const handleSave = async () => {
-    try {
-      await saveMutation.mutateAsync(career);
-      setDraft(null);
-      setJustSaved(true);
-      setTimeout(() => setJustSaved(false), 2000);
-    } catch (err) {
-      alert("Failed to save changes: " + err.message);
-    }
   };
 
   const renderList = (label, field, icon) => (
@@ -145,9 +173,16 @@ export default function JobDetailsPage() {
             <span className="font-headline-md text-xl text-primary font-bold tracking-tight line-clamp-1">
               {role.title}
             </span>
+            {isDirty && (
+              <span className="inline-flex items-center gap-1 text-tertiary font-subhead-sm text-xs uppercase tracking-wider shrink-0">
+                <span className="w-1.5 h-1.5 rounded-full bg-tertiary"></span> Unsaved
+              </span>
+            )}
           </div>
 
           <div className="flex items-center gap-3">
+            <UndoRedoButtons onUndo={undo} onRedo={redo} canUndo={canUndo} canRedo={canRedo} />
+
             <div className="bg-surface-container border border-outline-variant rounded-lg p-0.5 flex">
               <button
                 onClick={() => setEditorMode('edit')}
@@ -291,6 +326,8 @@ export default function JobDetailsPage() {
       </main>
 
       <Footer />
+
+      {unsavedModal}
     </div>
   );
 }

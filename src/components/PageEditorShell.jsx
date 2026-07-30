@@ -1,8 +1,12 @@
 import React, { useState } from 'react';
 import Navbar from './Navbar';
 import Footer from './Footer';
+import UndoRedoButtons from './UndoRedoButtons';
+import UnsavedChangesModal from './UnsavedChangesModal';
 import { setDeep } from './Editable';
 import { usePageContent, useSavePageContent } from '../hooks/usePageContent';
+import useEditorDraft from '../hooks/useEditorDraft';
+import useUnsavedChangesPrompt from '../hooks/useUnsavedChangesPrompt';
 
 const getDeep = (obj, path) => path.split('.').reduce((cur, key) => cur[key], obj);
 
@@ -10,12 +14,15 @@ const getDeep = (obj, path) => path.split('.').reduce((cur, key) => cur[key], ob
 // Content comes from the shared site-content query; local edits are held in a
 // draft that overrides the cached copy until it is saved or discarded.
 // Provides update/addItem/removeItem helpers and a sticky toolbar with
-// Edit/Preview toggle and Save.
+// Edit/Preview toggle, undo/redo and Save. Leaving the page with an unsaved
+// draft raises the save-or-discard modal.
 export default function PageEditorShell({ pageId, title, children }) {
   const { data: savedContent, isPending, isError, error, refetch } = usePageContent(pageId);
   const saveMutation = useSavePageContent(pageId);
 
-  const [draft, setDraft] = useState(null);
+  const { draft, commit, undo, redo, reset, canUndo, canRedo, isDirty } = useEditorDraft(savedContent);
+  const prompt = useUnsavedChangesPrompt(isDirty);
+
   const [editorMode, setEditorMode] = useState('edit');
   const [justSaved, setJustSaved] = useState(false);
 
@@ -23,12 +30,12 @@ export default function PageEditorShell({ pageId, title, children }) {
   const saveState = saveMutation.isPending ? 'saving' : justSaved ? 'saved' : 'idle';
 
   const update = (path, value) => {
-    setDraft((prev) => setDeep(prev ?? savedContent, path, value));
+    commit((current) => setDeep(current, path, value));
   };
 
   const addItem = (path, template, { prepend = false } = {}) => {
-    setDraft((prev) => {
-      const next = structuredClone(prev ?? savedContent);
+    commit((current) => {
+      const next = structuredClone(current);
       const arr = getDeep(next, path);
       if (prepend) {
         arr.unshift(structuredClone(template));
@@ -40,8 +47,8 @@ export default function PageEditorShell({ pageId, title, children }) {
   };
 
   const removeItem = (path, index) => {
-    setDraft((prev) => {
-      const next = structuredClone(prev ?? savedContent);
+    commit((current) => {
+      const next = structuredClone(current);
       const arr = getDeep(next, path);
       arr.splice(index, 1);
       return next;
@@ -51,9 +58,9 @@ export default function PageEditorShell({ pageId, title, children }) {
   const handleSave = async () => {
     try {
       await saveMutation.mutateAsync(content);
-      // The mutation pushed this content into the cache, so the draft can be
-      // dropped and the editor can read from the cache again.
-      setDraft(null);
+      // The mutation pushed this content into the cache, so the draft and its
+      // history can be dropped and the editor can read from the cache again.
+      reset();
       setJustSaved(true);
       setTimeout(() => setJustSaved(false), 2000);
       return true;
@@ -61,6 +68,15 @@ export default function PageEditorShell({ pageId, title, children }) {
       alert("Failed to save changes: " + err.message);
       return false;
     }
+  };
+
+  const handleSaveAndLeave = async () => {
+    if (await handleSave()) prompt.release();
+  };
+
+  const handleDiscardAndLeave = () => {
+    reset();
+    prompt.release();
   };
 
   return (
@@ -75,9 +91,16 @@ export default function PageEditorShell({ pageId, title, children }) {
               Editing: {pageId}
             </span>
             <span className="font-headline-md text-xl text-primary font-bold tracking-tight">{title}</span>
+            {isDirty && (
+              <span className="inline-flex items-center gap-1 text-tertiary font-subhead-sm text-xs uppercase tracking-wider">
+                <span className="w-1.5 h-1.5 rounded-full bg-tertiary"></span> Unsaved
+              </span>
+            )}
           </div>
 
           <div className="flex items-center gap-3">
+            <UndoRedoButtons onUndo={undo} onRedo={redo} canUndo={canUndo} canRedo={canRedo} />
+
             <div className="bg-surface-container border border-outline-variant rounded-lg p-0.5 flex">
               <button
                 onClick={() => setEditorMode('edit')}
@@ -143,6 +166,14 @@ export default function PageEditorShell({ pageId, title, children }) {
       </div>
 
       <Footer />
+
+      <UnsavedChangesModal
+        open={prompt.isPrompting}
+        saving={saveMutation.isPending}
+        onSave={handleSaveAndLeave}
+        onDiscard={handleDiscardAndLeave}
+        onCancel={prompt.dismiss}
+      />
     </div>
   );
 }

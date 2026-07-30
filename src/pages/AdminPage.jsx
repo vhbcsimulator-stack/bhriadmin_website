@@ -1,11 +1,19 @@
 ﻿import React, { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import useEditorDraft from '../hooks/useEditorDraft';
+import useUnsavedChangesPrompt from '../hooks/useUnsavedChangesPrompt';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
-import { EditableText, EditableImage } from '../components/Editable';
+import UndoRedoButtons from '../components/UndoRedoButtons';
+import UnsavedChangesModal from '../components/UnsavedChangesModal';
+import { EditableText, EditableImage, setDeep } from '../components/Editable';
 import { createDefaultPropertyTemplate } from '../data/propertiesManager';
 import { useProperties, useSaveProperty, useDeleteProperty } from '../hooks/useProperties';
 
+// Escape hatch used by the automated walkthroughs to skip confirmations.
+const shouldBypassConfirm = () =>
+  window.bypassConfirm ||
+  new URLSearchParams(window.location.search).get('bypassConfirm') === 'true';
 
 export default function AdminPage() {
   const navigate = useNavigate();
@@ -13,10 +21,15 @@ export default function AdminPage() {
   const savePropertyMutation = useSaveProperty();
   const deletePropertyMutation = useDeleteProperty();
   const [view, setView] = useState('dashboard'); // 'dashboard' | 'editor'
-  const [editingProperty, setEditingProperty] = useState(null);
+  // Last-saved snapshot of the property being edited; the draft history layers
+  // the unsaved edits on top of it.
+  const [baseProperty, setBaseProperty] = useState(null);
+  const { draft, commit, undo, redo, reset, canUndo, canRedo, isDirty } = useEditorDraft(baseProperty);
+  const prompt = useUnsavedChangesPrompt(isDirty);
+  const editingProperty = draft ?? baseProperty;
   const [editorMode, setEditorMode] = useState('edit'); // 'edit' | 'preview'
   const [activeTab, setActiveTab] = useState('overview');
-  
+
   // Modal for new project creation
   const [newProjectModal, setNewProjectModal] = useState(false);
   const [newProjectData, setNewProjectData] = useState({ id: '', title: '', location: 'Cavite' });
@@ -24,17 +37,25 @@ export default function AdminPage() {
 
   const fileInputRefs = useRef({});
 
-  const handleEditClick = (property) => {
+  const openEditor = (property) => {
     // Clone property to avoid directly modifying state before saving
-    setEditingProperty(JSON.parse(JSON.stringify(property)));
+    reset();
+    setBaseProperty(structuredClone(property));
     setView('editor');
     setEditorMode('edit');
     setActiveTab('overview');
   };
 
+  const closeEditor = () => {
+    reset();
+    setBaseProperty(null);
+    setView('dashboard');
+  };
+
+  const handleEditClick = (property) => openEditor(property);
+
   const handleDeleteClick = async (id) => {
-    const shouldDelete = window.bypassConfirm || 
-      new URLSearchParams(window.location.search).get('bypassConfirm') === 'true' ||
+    const shouldDelete = shouldBypassConfirm() ||
       window.confirm("Are you sure you want to delete this leisure community? This action cannot be undone.");
     if (shouldDelete) {
       try {
@@ -71,11 +92,8 @@ export default function AdminPage() {
       await savePropertyMutation.mutateAsync(newProject);
 
       // Auto-open in editor
-      setEditingProperty(newProject);
-      setView('editor');
-      setEditorMode('edit');
-      setActiveTab('overview');
-      
+      openEditor(newProject);
+
       // Reset modal state
       setNewProjectModal(false);
       setNewProjectData({ id: '', title: '', location: 'Cavite' });
@@ -84,34 +102,51 @@ export default function AdminPage() {
     }
   };
 
-  const handleSaveEditor = async () => {
+  // Persists the draft. `closeAfter` is false when saving from the
+  // unsaved-changes modal, where the pending navigation does the leaving.
+  const handleSaveEditor = async ({ closeAfter = true } = {}) => {
     if (!editingProperty.title.trim()) {
       alert("Project Title cannot be empty.");
-      return;
+      return false;
     }
     try {
       await savePropertyMutation.mutateAsync(editingProperty);
-      setView('dashboard');
-      setEditingProperty(null);
+      if (closeAfter) {
+        closeEditor();
+      } else {
+        // Keep the editor open, but the draft is now the saved state.
+        reset();
+        setBaseProperty(editingProperty);
+      }
+      return true;
     } catch (err) {
       alert("Failed to save changes: " + err.message);
+      return false;
     }
   };
 
   const handleCancelEditor = () => {
-    const shouldCancel = window.bypassConfirm || 
-                         new URLSearchParams(window.location.search).get('bypassConfirm') === 'true' ||
-                         window.confirm("Discard unsaved changes?");
-    if (shouldCancel) {
-      setView('dashboard');
-      setEditingProperty(null);
+    if (shouldBypassConfirm()) {
+      closeEditor();
+      return;
     }
+    // Clean drafts close straight away; dirty ones raise the save/discard modal.
+    prompt.guard(closeEditor);
+  };
+
+  const handleSaveAndLeave = async () => {
+    if (await handleSaveEditor({ closeAfter: false })) prompt.release();
+  };
+
+  const handleDiscardAndLeave = () => {
+    reset();
+    prompt.release();
   };
 
   // Bento Box Item Addition / Deletion Handlers
   const handleAddFacilityItem = () => {
-    setEditingProperty(prev => {
-      const updated = { ...prev };
+    commit(current => {
+      const updated = structuredClone(current);
       const newItem = {
         id: `facility-${Date.now()}`,
         title: "New Facility Item",
@@ -126,16 +161,16 @@ export default function AdminPage() {
   };
 
   const handleDeleteFacilityItem = (index) => {
-    setEditingProperty(prev => {
-      const updated = { ...prev };
+    commit(current => {
+      const updated = structuredClone(current);
       updated.facilities.items = updated.facilities.items.filter((_, idx) => idx !== index);
       return updated;
     });
   };
 
   const handleAddDevelopmentItem = () => {
-    setEditingProperty(prev => {
-      const updated = { ...prev };
+    commit(current => {
+      const updated = structuredClone(current);
       const newItem = {
         id: `dev-${Date.now()}`,
         title: "New Development Milestone",
@@ -147,8 +182,8 @@ export default function AdminPage() {
   };
 
   const handleDeleteDevelopmentItem = (index) => {
-    setEditingProperty(prev => {
-      const updated = { ...prev };
+    commit(current => {
+      const updated = structuredClone(current);
       updated.developments.items = updated.developments.items.filter((_, idx) => idx !== index);
       return updated;
     });
@@ -204,45 +239,19 @@ export default function AdminPage() {
     }
   };
 
-  // Helper for inline text editor
-  const handleTextChange = (path, value) => {
-    setEditingProperty(prev => {
-      const updated = { ...prev };
-      const keys = path.split('.');
-      let current = updated;
-      for (let i = 0; i < keys.length - 1; i++) {
-        current = current[keys[i]];
-      }
-      current[keys[keys.length - 1]] = value;
-      return updated;
-    });
+  // Helper for inline text editor. `mergeKey` is passed by the toolbar inputs
+  // that fire per keystroke so they collapse into one undo step.
+  const handleTextChange = (path, value, mergeKey = null) => {
+    commit(current => setDeep(current, path, value), mergeKey);
   };
 
   // Helper to edit array items (stats, text arrays, items inside nested objects)
   const handleArrayTextChange = (path, index, value) => {
-    setEditingProperty(prev => {
-      const updated = { ...prev };
-      const keys = path.split('.');
-      let current = updated;
-      for (let i = 0; i < keys.length; i++) {
-        current = current[keys[i]];
-      }
-      current[index] = value;
-      return updated;
-    });
+    commit(current => setDeep(current, `${path}.${index}`, value));
   };
 
   const handleNestedArrayTextChange = (path, index, itemKey, value) => {
-    setEditingProperty(prev => {
-      const updated = { ...prev };
-      const keys = path.split('.');
-      let current = updated;
-      for (let i = 0; i < keys.length; i++) {
-        current = current[keys[i]];
-      }
-      current[index] = { ...current[index], [itemKey]: value };
-      return updated;
-    });
+    commit(current => setDeep(current, `${path}.${index}.${itemKey}`, value));
   };
 
   return (
@@ -440,13 +449,19 @@ export default function AdminPage() {
                   <input 
                     type="text"
                     value={editingProperty.title}
-                    onChange={(e) => handleTextChange('title', e.target.value)}
+                    onChange={(e) => handleTextChange('title', e.target.value, 'toolbar.title')}
                     className="border-b border-outline-variant bg-transparent px-2 py-0.5 text-primary font-headline-md text-xl focus:outline-none font-bold max-w-xs md:max-w-md"
                     placeholder="Project Title"
                   />
                 ) : (
                   <span className="font-headline-md text-xl text-primary font-bold tracking-tight">
                     {editingProperty.title}
+                  </span>
+                )}
+
+                {isDirty && (
+                  <span className="inline-flex items-center gap-1 text-tertiary font-subhead-sm text-xs uppercase tracking-wider shrink-0">
+                    <span className="w-1.5 h-1.5 rounded-full bg-tertiary"></span> Unsaved
                   </span>
                 )}
               </div>
@@ -461,8 +476,8 @@ export default function AdminPage() {
                         value={editingProperty.location}
                         onChange={(e) => {
                           const val = e.target.value;
-                          setEditingProperty(prev => ({
-                            ...prev,
+                          commit(current => ({
+                            ...structuredClone(current),
                             location: val,
                             locationFull: `${val === 'Cavite' ? 'Indang, Cavite' : 'Nasugbu, Batangas'}`,
                             badgeLocation: `${val.toUpperCase()} PHILIPPINES`
@@ -480,7 +495,7 @@ export default function AdminPage() {
                       <input 
                         type="text"
                         value={editingProperty.badgeStatus}
-                        onChange={(e) => handleTextChange('badgeStatus', e.target.value.toUpperCase())}
+                        onChange={(e) => handleTextChange('badgeStatus', e.target.value.toUpperCase(), 'toolbar.badgeStatus')}
                         className="border border-outline-variant rounded bg-surface py-1 px-2 font-mono text-xs w-28 text-center"
                         placeholder="Status Badge"
                       />
@@ -492,8 +507,8 @@ export default function AdminPage() {
                         value={editingProperty.facilities.style}
                         onChange={(e) => {
                           const val = e.target.value;
-                          setEditingProperty(prev => {
-                            const updated = { ...prev };
+                          commit(current => {
+                            const updated = structuredClone(current);
                             updated.facilities.style = val;
                             return updated;
                           });
@@ -511,8 +526,8 @@ export default function AdminPage() {
                         value={editingProperty.developments?.style || 'bento-ewb'}
                         onChange={(e) => {
                           const val = e.target.value;
-                          setEditingProperty(prev => {
-                            const updated = { ...prev };
+                          commit(current => {
+                            const updated = structuredClone(current);
                             if (!updated.developments) {
                               updated.developments = { title: "Project Developments", items: [], style: "bento-ewb" };
                             }
@@ -528,6 +543,8 @@ export default function AdminPage() {
                     </div>
                   </div>
                 )}
+
+                <UndoRedoButtons onUndo={undo} onRedo={redo} canUndo={canUndo} canRedo={canRedo} />
 
                 {/* Editor Mode Selector */}
                 <div className="bg-surface-container border border-outline-variant rounded-lg p-0.5 flex">
@@ -545,11 +562,12 @@ export default function AdminPage() {
                   </button>
                 </div>
 
-                <button 
-                  onClick={handleSaveEditor}
-                  className="bg-primary text-on-primary px-7 py-1.5 rounded-lg font-subhead-sm hover:bg-primary-container hover:text-on-primary-container transition-all cursor-pointer font-bold shadow-sm text-xs"
+                <button
+                  onClick={() => handleSaveEditor()}
+                  disabled={savePropertyMutation.isPending}
+                  className="bg-primary text-on-primary px-7 py-1.5 rounded-lg font-subhead-sm hover:bg-primary-container hover:text-on-primary-container transition-all cursor-pointer font-bold shadow-sm text-xs disabled:opacity-60"
                 >
-                  Save
+                  {savePropertyMutation.isPending ? 'Saving...' : 'Save'}
                 </button>
                 
                 <button 
@@ -1235,6 +1253,15 @@ export default function AdminPage() {
           <Footer />
         </div>
       )}
+
+      <UnsavedChangesModal
+        open={prompt.isPrompting}
+        saving={savePropertyMutation.isPending}
+        message="You have unsaved changes to this project. Save them before leaving the editor, or discard them to continue."
+        onSave={handleSaveAndLeave}
+        onDiscard={handleDiscardAndLeave}
+        onCancel={prompt.dismiss}
+      />
     </div>
   );
 }
